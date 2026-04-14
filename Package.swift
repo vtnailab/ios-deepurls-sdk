@@ -15,6 +15,10 @@ let package = Package(
     targets: [
         .target(
             name: "DeepUrlsSDK",
-            path: "Sources/DeepUrlsSDK"),
+            path: "Sources/DeepUrlsSDK",
+            resources: [.process("Resources")]),
+        .testTarget(
+            name: "DeepUrlsSDKTests",
+            dependencies: ["DeepUrlsSDK"]),
     ]
 )

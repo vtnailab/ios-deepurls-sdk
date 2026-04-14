@@ -1,104 +1,147 @@
-# DeepUrls SDK for iOS
+# 🚀 DeepUrls SDK for iOS & macOS
 
-Swift Package Manager (SPM) library for creating and managing deep links. Mirrors the logic of the Android DeepUrls SDK.
+[![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20macOS-blue.svg)](https://developer.apple.com/ios/)
+[![Swift](https://img.shields.io/badge/Swift-5.5+-orange.svg)](https://swift.org)
+[![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen.svg)](https://swift.org/package-manager/)
 
-## Requirements
+A lightweight, powerful Swift Package Manager (SPM) library for creating and managing deep links. Designed for performance and strict logic parity with the Android DeepUrls SDK.
 
-- iOS 13+ / macOS 10.15+
-- Swift 5.5+
+---
 
-## Installation
+## 📋 Requirements
+
+- **iOS 13.0+** / **macOS 10.15+**
+- **Swift 5.5+** (Supports `async/await`)
+- **Xcode 13+**
+
+---
+
+## 📦 Installation
 
 ### Swift Package Manager
 
-Add to your `Package.swift` or in Xcode: **File → Add Package Dependencies**
+Add the following URL to your package dependencies in Xcode (**File → Add Packages...**):
 
-```
-https://github.com/your-org/deepurl-SDK-iOS
-```
-
-Or add locally (e.g. if the package sits next to your project):
-
-```swift
-dependencies: [
-    .package(path: "../deepurl-SDK-iOS")
-]
+```text
+https://github.com/vtnailab/ios-deepurls-sdk
 ```
 
-## Usage
+---
 
-### 1. Configure
+## 🚀 Quick Start
 
-In `AppDelegate` or your app's entry point:
+### 1. Initialize the SDK
+Initialize the SDK once, typically in your `AppDelegate` or `@main` App struct.
 
 ```swift
 import DeepUrlsSDK
 
-// In application(_:didFinishLaunchingWithOptions:)
+// Basic Configuration
 DeepUrls.configure(appId: "your-app-id", deepKey: "your-deep-key")
-
-// Optional: if you have referrer from a launch URL
-DeepUrls.configure(appId: "your-app-id", deepKey: "your-deep-key", referrer: referrerString)
 ```
 
-### 2. Create links
+### 2. Create Deep Links
+You can create short or long deep links either using modern `async/await` or traditional completion handlers.
 
+#### Option A: Modern Swift (Async/Await)
 ```swift
-DeepUrls.createLink(route: "promo/offer", params: ["code": "SAVE20"], useShort: true) { success, url, longUrl in
-    if success, let link = url {
-        // Share or use the link
-        print("Short link: \(link)")
+do {
+    let (shortUrl, longUrl) = try await DeepUrls.createLink(
+        route: "promo/discount",
+        params: ["code": "SAVE50"]
+    )
+    print("✨ Link created: \(shortUrl ?? "n/a")")
+} catch {
+    print("❌ Error: \(error.localizedDescription)")
+}
+```
+
+#### Option B: Completion Handler
+```swift
+DeepUrls.createLink(route: "promo/discount", params: ["code": "SAVE50"]) { success, shortUrl, longUrl in
+    if success, let link = shortUrl {
+        print("✨ Short link: \(link)")
     }
 }
 ```
 
-### 3. Handle incoming deeplinks
+---
 
-When a user clicks a deeplink and opens your app, call `handleOpenURL` from your app delegate or scene delegate:
+## 📱 Handling Incoming Links
 
-**UIKit (AppDelegate):**
-```swift
-func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
-    return DeepUrls.handleOpenURL(url) { result in
-        // Navigate to the appropriate screen
-        // result.route = "promo/offer", result.params = ["code": "SAVE20"]
-        navigateTo(route: result.route, params: result.params)
-    }
-}
-```
+The SDK handles Universal Links and Custom URL Schemes seamlessly. It automatically reports referrers for attribution and parses parameters for you.
 
-**SwiftUI (onOpenURL):**
+### SwiftUI
 ```swift
 WindowGroup {
     ContentView()
         .onOpenURL { url in
             DeepUrls.handleOpenURL(url) { result in
-                navigateTo(route: result.route, params: result.params)
+                print("🎯 Navigate to \(result.route) with \(result.params)")
             }
         }
 }
 ```
 
-The SDK will automatically report referrer (for attribution) if the URL contains `clickId`, and call your handler with the parsed route and params for in-app navigation.
-
-### 4. Report referrer (optional)
-
-If you obtain referrer data from a deep link or attribution provider (and don't use `handleOpenURL`):
-
+### UIKit (iOS)
 ```swift
-DeepUrls.reportReferrer("utm_source=...&clickId=abc123")
+func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+    return DeepUrls.handleOpenURL(url) { result in
+        // Your navigation logic
+    }
+}
 ```
 
-## API
+### AppKit (macOS)
+```swift
+func application(_ application: NSApplication, open urls: [URL]) {
+    guard let url = urls.first else { return }
+    DeepUrls.handleOpenURL(url) { result in
+        // Your navigation logic
+    }
+}
+```
 
-| Method | Description |
-|--------|-------------|
-| `configure(appId:deepKey:referrer:)` | Initialize the SDK with credentials |
-| `createLink(route:params:useShort:callback:)` | Create a deep link (short or long) |
-| `handleOpenURL(_:onHandled:)` | Handle incoming deeplink URLs; reports referrer and invokes handler for navigation |
-| `reportReferrer(_:)` | Manually report referrer when available |
+---
 
-## Differences from Android SDK
+## 🛠 Advanced Features
 
-- **Config**: iOS uses programmatic configuration instead of loading from `deepUrlsConfig.json`
-- **Referrer**: iOS has no Install Referrer API. Use `reportReferrer` when you have referrer data from a deep link or attribution provider
+### Error Handling
+The SDK provides detailed error types to help you debug integration issues.
+
+```swift
+do {
+    try await DeepUrls.createLink(route: "test")
+} catch let error as DeepUrlsError {
+    switch error {
+    case .notConfigured:    print("Please call configure() first")
+    case .unauthorized:     print("Check your appId and deepKey")
+    case .serverError(let code, let msg): print("Server Error \(code): \(msg ?? "")")
+    default:                print("Something went wrong")
+    }
+}
+```
+
+### Result Structure
+When a deep link is handled, you receive a `DeepLinkResult`:
+
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `route` | `String` | The path components (e.g., `promo/offer`). |
+| `params` | `[String: String]` | Key-value pairs from the URL query. |
+| `url` | `URL` | The original deep link URL. |
+
+---
+
+## 🧪 Testing
+
+The SDK includes a comprehensive test suite. To run the tests, execute the following in your terminal:
+
+```bash
+swift test
+```
+
+---
+
+## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

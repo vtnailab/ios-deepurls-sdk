@@ -8,10 +8,17 @@ public struct DeepLinkResult {
     public let params: [String: String]
     /// The original URL
     public let url: URL
+    
+    public init(route: String, params: [String: String], url: URL) {
+        self.route = route
+        self.params = params
+        self.url = url
+    }
 }
 
 /// Handles incoming deeplink URLs when the app is opened via a link.
 public enum DeepLinkHandler {
+    private static let mockBundleId = "com.deepurls.sdk.mock"
     
     /// Call this when your app receives a URL from `application(_:open:options:)` or `scene(_:openURLContexts:)`.
     /// The SDK will:
@@ -27,13 +34,23 @@ public enum DeepLinkHandler {
         url: URL,
         onHandled: ((DeepLinkResult) -> Void)? = nil
     ) -> Bool {
-        guard let bundleId = Bundle.main.bundleIdentifier else { return false }
+        let bundleId = Bundle.main.bundleIdentifier ?? mockBundleId
+        
+        let result = parse(url: url)
         
         // Build referrer string from query (e.g. clickId=abc&utm_source=...)
-        if let query = url.query, query.contains("clickId") {
+        if result.params["clickId"] != nil, let query = url.query {
             ReferrerManager.reportReferrer(referrer: query, bundleId: bundleId)
         }
         
+        onHandled?(result)
+        return true
+    }
+    
+    /// Parses a deep link URL into a `DeepLinkResult`.
+    /// - Parameter url: The incoming deep link URL.
+    /// - Returns: A `DeepLinkResult` containing the route and parameters.
+    public static func parse(url: URL) -> DeepLinkResult {
         // Parse route from path: /promo/offer -> "promo/offer"
         let path = url.path
         let route: String
@@ -54,8 +71,6 @@ public enum DeepLinkHandler {
             }
         }
         
-        let result = DeepLinkResult(route: route, params: params, url: url)
-        onHandled?(result)
-        return true
+        return DeepLinkResult(route: route, params: params, url: url)
     }
 }
