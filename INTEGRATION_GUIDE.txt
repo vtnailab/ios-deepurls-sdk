@@ -1,0 +1,99 @@
+DEEPURLS SDK INTEGRATION GUIDE (iOS & macOS)
+============================================
+
+Step 1: Add the Swift Package
+-----------------------------
+1. Open your project in Xcode.
+2. Go to File -> Add Packages...
+3. Enter the repository URL: https://github.com/vtnailab/ios-deepurls-sdk
+4. Select "Up to Next Major Version" and click "Add Package".
+
+Step 2: Configure Universal Links (Optional)
+--------------------------------------------
+To allow links to open your app directly:
+1. Go to your target's "Signing & Capabilities" tab.
+2. Click "+ Capability" and add "Associated Domains".
+3. Add your link domain: applinks:links.voicetonotes.ai
+
+> [TIP]
+> **Custom URL Schemes**: If you aren't using Universal Links, ensure you've added your URL Scheme (e.g., `myapp://`) to the **Info** tab of your target in Xcode under **URL Types**.
+
+Step 3: Initialize the SDK
+--------------------------
+Initialize the SDK once at app startup (e.g., in your AppDelegate or @main struct).
+
+Example (SwiftUI @main):
+import DeepUrlsSDK
+
+@main
+struct YourApp: App {
+    init() {
+        DeepUrls.configure(
+            appId: "YOUR_APP_ID", 
+            deepKey: "YOUR_DEEP_KEY"
+        )
+    }
+    
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+    }
+}
+
+Step 4: Handle Incoming Links
+-----------------------------
+The SDK provides a method to parse incoming URLs and report attribution data.
+
+SwiftUI Example:
+ContentView()
+    .onOpenURL { url in
+        DeepUrls.handleOpenURL(url) { result in
+            // Use result.route and result.params for navigation
+            print("Navigate to: \(result.route)")
+        }
+    }
+
+UIKit Example (AppDelegate / SceneDelegate):
+----------------------------------------
+If your app uses the newer SceneDelegate (SwiftUI Lifecycle or modern UIKit):
+```swift
+func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    guard let url = URLContexts.first?.url else { return }
+    DeepUrls.handleOpenURL(url) { result in
+        // Your navigation logic here
+        print("Scene handled route: \(result.route)")
+    }
+}
+```
+
+For older AppDelegate-only apps:
+```swift
+func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+    return DeepUrls.handleOpenURL(url) { result in
+        // Your navigation logic here
+    }
+}
+```
+----------------------------------------
+
+Step 5: Generate Deep Links
+---------------------------
+To create and share content links:
+
+Task {
+    do {
+        let (shortUrl, _) = try await DeepUrls.createLink(
+            route: "profile/share",
+            params: ["userId": "123"]
+        )
+        print("Share link: \(shortUrl ?? "n/a")")
+    } catch {
+        print("Error: \(error)")
+    }
+}
+
+Step 6: Privacy Compliance
+--------------------------
+The SDK includes a PrivacyInfo.xcprivacy file. Ensure your App Store submission acknowledges the use of "UserDefaults" for state persistence.
+============================================
