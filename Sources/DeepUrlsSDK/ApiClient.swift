@@ -74,11 +74,25 @@ enum ApiClient {
         route: String,
         params: [String: Any] = [:],
         useShort: Bool = true,
+        previewTitle: String = "",
+        previewDescription: String = "",
+        previewImage: String? = nil,
+        previewImageFileURL: URL? = nil,
+        campaignData: [String: Any] = [:],
         callback: @escaping (Bool, String?, String?) -> Void
     ) {
         Task {
             do {
-                let (url, longUrl) = try await createLinkAsync(route: route, params: params, useShort: useShort)
+                let (url, longUrl) = try await createLinkAsync(
+                    route: route,
+                    params: params,
+                    useShort: useShort,
+                    previewTitle: previewTitle,
+                    previewDescription: previewDescription,
+                    previewImage: previewImage,
+                    previewImageFileURL: previewImageFileURL,
+                    campaignData: campaignData
+                )
                 callback(true, url, longUrl)
             } catch {
                 print("[DeepUrlsSDK] CreateLink error: \(error.localizedDescription)")
@@ -90,7 +104,12 @@ enum ApiClient {
     static func createLinkAsync(
         route: String,
         params: [String: Any] = [:],
-        useShort: Bool = true
+        useShort: Bool = true,
+        previewTitle: String = "",
+        previewDescription: String = "",
+        previewImage: String? = nil,
+        previewImageFileURL: URL? = nil,
+        campaignData: [String: Any] = [:]
     ) async throws -> (String?, String?) {
         let timestamp = Int(Date().timeIntervalSince1970)
         let nonce = generateNonce()
@@ -110,27 +129,45 @@ enum ApiClient {
         
         let signature = CryptoUtils.hmacSha256(data: canonicalPayload, secret: config.deepKey)
         
-        let bodyDict: [String: Any] = [
+        var bodyDict: [String: Any] = [
             "appId": config.appId,
             "route": route,
             "params": params,
             "useShort": useShort,
+            "previewTitle": previewTitle,
+            "previewDescription": previewDescription,
+            "campaignData": campaignData,
             "timestamp": timestamp,
             "nonce": nonce
         ]
         
-        guard let bodyData = try? JSONSerialization.data(withJSONObject: bodyDict) else {
-            throw DeepUrlsError.serializationError
+        if let previewImage = previewImage, !previewImage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            bodyDict["previewImage"] = previewImage
         }
         
         var request = URLRequest(url: URL(string: postGenerateLinkURL)!)
         request.httpMethod = "POST"
         request.timeoutInterval = 15.0
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("\(timestamp)", forHTTPHeaderField: "x-timestamp")
         request.setValue(nonce, forHTTPHeaderField: "x-nonce")
         request.setValue(signature, forHTTPHeaderField: "x-signature")
-        request.httpBody = bodyData
+        
+        if let previewImageFileURL = previewImageFileURL {
+            let boundary = "DeepUrlsBoundary-\(UUID().uuidString)"
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try multipartBody(
+                fields: bodyDict,
+                fileURL: previewImageFileURL,
+                fileFieldName: "previewImage",
+                boundary: boundary
+            )
+        } else {
+            guard let bodyData = try? JSONSerialization.data(withJSONObject: bodyDict) else {
+                throw DeepUrlsError.serializationError
+            }
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = bodyData
+        }
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -154,5 +191,36 @@ enum ApiClient {
         let url = json["url"] as? String
         let longUrl = json["longUrl"] as? String
         return (url, longUrl)
+    }
+    
+    private static func multipartBody(
+        fields: [String: Any],
+        fileURL: URL,
+        fileFieldName: String,
+        boundary: String
+    ) throws -> Data {
+        var body = Data()
+        
+        for (key, value) in fields {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n".data(using: .utf8)!)
+            if let stringValue = value as? String {
+                body.append("\(stringValue)\r\n".data(using: .utf8)!)
+            } else if let data = try? JSONSerialization.data(withJSONObject: value),
+                      let json = String(data: data, encoding: .utf8) {
+                body.append("\(json)\r\n".data(using: .utf8)!)
+            } else {
+                body.append("\(value)\r\n".data(using: .utf8)!)
+            }
+        }
+        
+        let fileName = fileURL.lastPathComponent
+        let fileData = try Data(contentsOf: fileURL)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"\(fileFieldName)\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/*\r\n\r\n".data(using: .utf8)!)
+        body.append(fileData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        return body
     }
 }

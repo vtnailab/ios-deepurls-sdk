@@ -65,6 +65,18 @@ DeepUrls.createLink(route: "promo/discount", params: ["code": "SAVE50"]) { succe
 }
 ```
 
+#### Link Preview and Campaign Metadata
+```swift
+let (shortUrl, longUrl) = try await DeepUrls.createLink(
+    route: "promo/discount",
+    params: ["code": "SAVE50"],
+    previewTitle: "Summer Sale",
+    previewDescription: "Save 20% for a limited time",
+    previewImage: "https://example.com/preview.png",
+    campaignData: ["campaignId": "campaign_123", "source": "newsletter"]
+)
+```
+
 ---
 
 ## 📱 Handling Incoming Links
