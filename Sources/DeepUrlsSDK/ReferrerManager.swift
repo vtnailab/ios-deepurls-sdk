@@ -18,13 +18,16 @@ enum ReferrerManager {
         }
         
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+        let currentBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
         let lastVersion = defaults.string(forKey: prefsVersionKey)
         let alreadySent = defaults.bool(forKey: prefsKey)
         
-        if lastVersion != currentVersion || !alreadySent {
+        // Report if version/build changed OR if never sent.
+        let versionString = "\(currentVersion)(\(currentBuild))"
+        if lastVersion != versionString || !alreadySent {
             ApiClient.sendReferrer(referrer: referrer, bundleId: bundleId)
             defaults.set(true, forKey: prefsKey)
-            defaults.set(currentVersion, forKey: prefsVersionKey)
+            defaults.set(versionString, forKey: prefsVersionKey)
         }
     }
 }

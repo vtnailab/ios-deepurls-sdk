@@ -21,7 +21,7 @@ public enum DeepUrls {
         }
     }
     
-    /// Create a deep link. The callback receives (success, shortUrl, longUrl).
+    /// Create a deep link using a completion handler.
     /// - Parameters:
     ///   - route: The route path (e.g. "promo/offer")
     ///   - params: Optional query parameters as key-value pairs
@@ -36,6 +36,21 @@ public enum DeepUrls {
         ApiClient.createLink(route: route, params: params, useShort: useShort, callback: callback)
     }
     
+    /// Create a deep link using async/await.
+    /// - Parameters:
+    ///   - route: The route path (e.g. "promo/offer")
+    ///   - params: Optional query parameters as key-value pairs
+    ///   - useShort: If true, returns a short link; otherwise a long link
+    /// - Returns: A tuple containing (shortUrl, longUrl)
+    /// - Throws: `DeepUrlsError` if the request fails
+    public static func createLink(
+        route: String,
+        params: [String: Any] = [:],
+        useShort: Bool = true
+    ) async throws -> (String?, String?) {
+        try await ApiClient.createLinkAsync(route: route, params: params, useShort: useShort)
+    }
+    
     /// Call this when you receive referrer data from a deep link or attribution provider.
     /// - Parameter referrer: The referrer string containing clickId
     public static func reportReferrer(_ referrer: String) {
@@ -43,14 +58,20 @@ public enum DeepUrls {
         ReferrerManager.reportReferrer(referrer: referrer, bundleId: bundleId)
     }
     
-    /// Handle incoming deeplink URLs when the app is opened via a link.
-    /// Call from `application(_:open:options:)` or `scene(_:openURLContexts:)`.
-    /// Reports referrer automatically if URL contains clickId, and invokes the handler for in-app navigation.
+    /// Handles incoming deeplink URLs when the app is opened via a link.
+    ///
+    /// This method should be called from your app's entry points such as `application(_:open:options:)` 
+    /// on iOS/macOS or `WindowGroup.onOpenURL` in SwiftUI.
+    ///
+    /// The SDK will:
+    /// 1. Automatically parse the URL into a ``DeepLinkResult``.
+    /// 2. Report any attribution data (like `clickId`) to the backend.
+    /// 3. Invoke your custom handler for in-app navigation.
     ///
     /// - Parameters:
-    ///   - url: The URL that opened your app
-    ///   - onHandled: Called with parsed route and params; use to navigate to the appropriate screen
-    /// - Returns: `true` if handled
+    ///   - url: The URL that opened your app.
+    ///   - onHandled: An optional closure called with the parsed route and parameters.
+    /// - Returns: `true` if the SDK recognized and handled the URL; otherwise `false`.
     @discardableResult
     public static func handleOpenURL(
         _ url: URL,
