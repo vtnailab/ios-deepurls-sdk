@@ -31,9 +31,24 @@ public enum DeepUrls {
         route: String,
         params: [String: Any] = [:],
         useShort: Bool = true,
+        previewTitle: String = "",
+        previewDescription: String = "",
+        previewImage: String? = nil,
+        previewImageFileURL: URL? = nil,
+        campaignData: [String: Any] = [:],
         callback: @escaping (Bool, String?, String?) -> Void
     ) {
-        ApiClient.createLink(route: route, params: params, useShort: useShort, callback: callback)
+        ApiClient.createLink(
+            route: route,
+            params: params,
+            useShort: useShort,
+            previewTitle: previewTitle,
+            previewDescription: previewDescription,
+            previewImage: previewImage,
+            previewImageFileURL: previewImageFileURL,
+            campaignData: campaignData,
+            callback: callback
+        )
     }
     
     /// Create a deep link using async/await.
@@ -46,9 +61,23 @@ public enum DeepUrls {
     public static func createLink(
         route: String,
         params: [String: Any] = [:],
-        useShort: Bool = true
+        useShort: Bool = true,
+        previewTitle: String = "",
+        previewDescription: String = "",
+        previewImage: String? = nil,
+        previewImageFileURL: URL? = nil,
+        campaignData: [String: Any] = [:]
     ) async throws -> (String?, String?) {
-        try await ApiClient.createLinkAsync(route: route, params: params, useShort: useShort)
+        try await ApiClient.createLinkAsync(
+            route: route,
+            params: params,
+            useShort: useShort,
+            previewTitle: previewTitle,
+            previewDescription: previewDescription,
+            previewImage: previewImage,
+            previewImageFileURL: previewImageFileURL,
+            campaignData: campaignData
+        )
     }
     
     /// Call this when you receive referrer data from a deep link or attribution provider.
