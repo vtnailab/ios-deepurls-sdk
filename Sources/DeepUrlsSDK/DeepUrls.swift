@@ -4,7 +4,7 @@ import Foundation
 public enum DeepUrls {
     private static var _config: DeepUrlsConfig?
     private static let lock = NSLock()
-    
+
     /// Initialize the SDK with app credentials.
     /// - Parameters:
     ///   - appId: Your app ID from the DeepUrls dashboard
@@ -13,14 +13,14 @@ public enum DeepUrls {
     public static func configure(appId: String, deepKey: String, referrer: String? = nil) {
         lock.lock()
         defer { lock.unlock() }
-        
+
         _config = DeepUrlsConfig(appId: appId, deepKey: deepKey)
-        
+
         if let referrer = referrer, let bundleId = Bundle.main.bundleIdentifier {
             ReferrerManager.reportReferrer(referrer: referrer, bundleId: bundleId)
         }
     }
-    
+
     /// Create a deep link using a completion handler.
     /// - Parameters:
     ///   - route: The route path (e.g. "promo/offer")
@@ -50,7 +50,7 @@ public enum DeepUrls {
             callback: callback
         )
     }
-    
+
     /// Create a deep link using async/await.
     /// - Parameters:
     ///   - route: The route path (e.g. "promo/offer")
@@ -79,17 +79,17 @@ public enum DeepUrls {
             campaignData: campaignData
         )
     }
-    
+
     /// Call this when you receive referrer data from a deep link or attribution provider.
     /// - Parameter referrer: The referrer string containing clickId
     public static func reportReferrer(_ referrer: String) {
         guard let bundleId = Bundle.main.bundleIdentifier else { return }
         ReferrerManager.reportReferrer(referrer: referrer, bundleId: bundleId)
     }
-    
+
     /// Handles incoming deeplink URLs when the app is opened via a link.
     ///
-    /// This method should be called from your app's entry points such as `application(_:open:options:)` 
+    /// This method should be called from your app's entry points such as `application(_:open:options:)`
     /// on iOS/macOS or `WindowGroup.onOpenURL` in SwiftUI.
     ///
     /// The SDK will:
@@ -108,11 +108,37 @@ public enum DeepUrls {
     ) -> Bool {
         DeepLinkHandler.handle(url: url, onHandled: onHandled)
     }
-    
+
+    // MARK: - iOS Clipboard Conversion
+
+    /// Reports a clipboard-based conversion for iOS deferred deep-link attribution (fire-and-forget).
+    ///
+    /// Call this when you obtain a `clickId` from the iOS clipboard after a fresh install.
+    /// The SDK will send the conversion to the backend exactly once per app version/build.
+    ///
+    /// - Parameter clickId: The click identifier extracted from the clipboard.
+    public static func reportClipboardConversion(_ clickId: String) {
+        ClipboardConversionManager.reportClipboardConversion(clickId)
+    }
+
+    /// Reports a clipboard-based conversion for iOS deferred deep-link attribution.
+    ///
+    /// - Parameter clickId: The click identifier extracted from the clipboard.
+    /// - Returns: `true` if the backend confirmed the conversion (HTTP 200), `false` otherwise.
+    @discardableResult
+    public static func reportClipboardConversionAsync(_ clickId: String) async -> Bool {
+        await ClipboardConversionManager.reportClipboardConversionAsync(clickId)
+    }
+
+    /// Whether a clipboard conversion has already been successfully sent for the current app version/build.
+    public static var isClipboardConversionSent: Bool {
+        ClipboardConversionManager.isClipboardConversionSent
+    }
+
     internal static func getConfig() -> DeepUrlsConfig {
         lock.lock()
         defer { lock.unlock() }
-        
+
         guard let config = _config else {
             fatalError("DeepUrls SDK not initialized. Call DeepUrls.configure(appId:deepKey:) first.")
         }
