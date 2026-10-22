@@ -1,0 +1,171 @@
+# Release — Automated Tag Generation
+#
+# Manually triggered workflow that validates the Swift package, then creates
+# an annotated semantic-version tag.
+#
+# Safety features:
+#   - Strict semver format validation (X.Y.Z, no "v" prefix).
+#   - Refuses to overwrite an existing tag.
+#   - Full build and test suite must pass before tagging.
+#   - Dry-run mode for validation without publishing.
+#   - Tag creation restricted to the main branch.
+#   - Concurrency group prevents parallel release attempts.
+#   - Uses GITHUB_TOKEN (not a PAT) — tag pushes via GITHUB_TOKEN do not
+#     trigger other workflows, preventing recursion.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          Semantic version to release (e.g. 1.1.0).
+          Must be X.Y.Z format — do not include a "v" prefix.
+        required: true
+        type: string
+      dry_run:
+        description: >-
+          Validate only — do not create a tag or release.
+        required: false
+        type: boolean
+        default: false
+      create_release:
+        description: >-
+          Also create a GitHub Release (with auto-generated notes)
+          in addition to the Git tag.
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false          # queue rather than cancel — avoids half-tagged state
+
+permissions:
+  contents: write                     # required for tag push and release creation
+
+jobs:
+  release:
+    name: Release ${{ inputs.version }}${{ inputs.dry_run && ' (dry run)' || '' }}
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      # ── Validation ──────────────────────────────────────────────
+
+      - name: Validate version format
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version format '$VERSION'. Must match X.Y.Z (e.g. 1.2.3)."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "✅ Version format valid: $VERSION"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0              # full history for accurate tag checks
+
+      - name: Check tag does not already exist
+        run: |
+          if git tag -l "$VERSION" | grep -q .; then
+            echo "::error::Tag '$VERSION' already exists locally."
+            exit 1
+          fi
+          if git ls-remote --tags origin "refs/tags/$VERSION" | grep -q .; then
+            echo "::error::Tag '$VERSION' already exists on remote."
+            exit 1
+          fi
+          echo "✅ Tag '$VERSION' is available."
+
+      - name: Verify running on main branch
+        if: ${{ !inputs.dry_run }}
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "::error::Release tags can only be created from the 'main' branch. Current ref: $REF"
+            exit 1
+          fi
+          echo "✅ Running on main branch."
+
+      # ── Build & Test ────────────────────────────────────────────
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Validate package manifest
+        run: swift package dump-package
+
+      - name: Build
+        run: swift build
+
+      - name: Run tests
+        run: swift test
+
+      # ── Tag & Release (skipped in dry-run mode) ─────────────────
+
+      - name: Create annotated tag
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "DeepUrlsSDK $VERSION"
+          echo "✅ Annotated tag '$VERSION' created locally."
+
+      - name: Push tag
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if git ls-remote --tags origin "refs/tags/$VERSION" | grep -q .; then
+            echo "::error::Tag '$VERSION' appeared on the remote after the initial check. Aborting."
+            exit 1
+          fi
+          git push origin "$VERSION"
+          echo "✅ Tag '$VERSION' pushed to remote."
+
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run && inputs.create_release }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$VERSION" \
+            --title "DeepUrlsSDK $VERSION" \
+            --generate-notes
+          echo "✅ GitHub Release created for '$VERSION'."
+
+      # ── Summary ─────────────────────────────────────────────────
+
+      - name: Dry-run summary
+        if: ${{ inputs.dry_run }}
+        run: |
+          {
+            echo "## 🏜️ Dry Run Complete"
+            echo ""
+            echo "Version **$VERSION** passed all validation checks:"
+            echo "- ✅ Semantic version format"
+            echo "- ✅ Tag does not already exist"
+            echo "- ✅ Package manifest valid"
+            echo "- ✅ Build succeeded"
+            echo "- ✅ All tests passed"
+            echo ""
+            echo "**No tag or release was created.**"
+            echo ""
+            echo "To perform a real release, re-run this workflow with *dry_run* unchecked."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release summary
+        if: ${{ !inputs.dry_run }}
+        run: |
+          {
+            echo "## ✅ Release Complete"
+            echo ""
+            echo "- **Version:** $VERSION"
+            echo "- **Commit:** ${{ github.sha }}"
+            echo "- **Tag type:** Annotated"
+            echo "- **GitHub Release:** ${{ inputs.create_release && 'Created' || 'Skipped' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
